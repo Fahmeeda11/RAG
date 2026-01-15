@@ -16,6 +16,7 @@ DATA_URL = ["https://www.geeksforgeeks.org/nlp/stock-price-prediction-project-us
 def load_page():
     loader = WebBaseLoader(DATA_URL)
     page = loader.load()
+    print("test")
     return page
 
 
