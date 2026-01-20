@@ -1,101 +1,124 @@
 #load the data
 #import necessary libraries and create env
+import getpass
 import os
+import openai
 from langchain_core.documents import Document
 from dotenv import load_dotenv
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_community.vectorstores import FAISS
-from transformers import pipeline
+from langchain_openai import OpenAIEmbeddings
+from langchain_openai import ChatOpenAI
+from langchain_chroma import Chroma
+from langchain_community.document_loaders import PyPDFLoader
 from langchain_community.llms import HuggingFacePipeline
 #from langchain_community.llms import HuggingFaceHub
 from langchain_classic.chains.retrieval_qa.base import RetrievalQA
 #env variables
 load_dotenv()
 USER_AGENT= os.getenv('USER_AGENT')
+ROOT_PATH = os.getenv('SINGLE_FILE_PATH')
+OPENAI_API_KEY = getpass.getpass(os.getenv('OPENAI_API_KEY'))
+CHROMA_PATH = os.getenv('CHROMA_PATH')
 #HUGGINGFACEHUB_API_TOKEN = os.getenv('HUGGINGFACEHUB_API_TOKEN')
 
 ##to load data from web pages we can use WebBaseLoader. lanchain provides various document loaders to load data from different sources. 
 from langchain_community.document_loaders import WebBaseLoader
 
-#add the url of the web page
-DATA_URL = ["https://www.geeksforgeeks.org/nlp/stock-price-prediction-project-using-tensorflow/",
-            "https://www.geeksforgeeks.org/deep-learning/training-of-recurrent-neural-networks-rnn-in-tensorflow/"]
+# function to load pdf files from a folder
+def load_pdf(DATA_PATH):
+    print(f"loading pdf files from {DATA_PATH}...")
+    all_docs = [] #list to store all documents
+    for file_path in os.listdir(DATA_PATH): #in this folder go over each thing
+        if file_path.endswith(".pdf"): # if thing name ends in .pdf
+            file_path = os.path.join(DATA_PATH, file_path) #get full path of thing
+            
+            loaders = PyPDFLoader(file_path) #load the pdf
+            all_docs.append( loaders.load()) #append the loaded pdf to the list
+            
+        else:
+            #call the function recursively if there are subfolders
+            sub_dir = os.path.join(DATA_PATH, file_path)
+            if os.path.isdir(sub_dir):
+                all_docs.extend(load_pdf(sub_dir))
+    print(f"loaded {len(all_docs)} documents from {DATA_PATH}.")
+    return all_docs
+
+#function to split documents into chunks
+def split_documents(documents):
+    chunks = []
+    for doc in documents:
+        text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=800,
+        chunk_overlap=80,
+        length_function=len,
+        is_separator_regex=False,
+    )
+        doc_chunks = text_splitter.split_documents(doc)
+        chunks.extend(doc_chunks)
+    print(f"split {len(documents)} documents into {len(chunks)} chunks.")
+    return chunks
+
+#function to create embeddings
+def embedding_function():
+    print("creating embeddings using OpenAI...")
+    #create embeddings using OpenAI
+    embeddings = OpenAIEmbeddings(
+        model="text-embedding-3-large"
+                )
+    print("created embeddings using OpenAI.")
+    return embeddings
+
+
+list_of_docs = load_pdf(ROOT_PATH)
+print(f"loaded {len(list_of_docs)} documents from {ROOT_PATH}.")
+chunks = split_documents(list_of_docs)
+embeddings = embedding_function()
+
+
+
+#create vector store using Chroma
+db =Chroma(collection_name="documents", embedding_function=embeddings, persist_directory=CHROMA_PATH)
+db.add_documents(chunks)
+print(f"saved {len(chunks)} chunks to {CHROMA_PATH}.")
+
+
+
+
+
 
 #main function 
-def main():
-    chunks = generate_data_stores()    
+#def main():
+    #chunks = generate_data_stores()    
     #create embeddings without any api key
-    embeddings = HuggingFaceEmbeddings(
-        model_name="sentence-transformers/all-MiniLM-L6-v2"
-    )
+    #embeddings = HuggingFaceEmbeddings(
+        #model_name="sentence-transformers/all-MiniLM-L6-v2"
+    #)
     #used vector store using FAISS
-    vectorstore = FAISS.from_documents(chunks, embeddings)
-    retriever = vectorstore.as_retriever(
-        search_type="mmr",
-        search_kwargs={"k": 3}
-    )
+    #vectorstore = FAISS.from_documents(chunks, embeddings)
+    #retriever = vectorstore.as_retriever(
+        #search_type="mmr",
+        #search_kwargs={"k": 3}
+    #)
 
-    query = "what is recurrent neural network?"
-    docs = response(query, retriever)
-    print(docs)
+    #query = "what is recurrent neural network?"
+    #docs = response(query, retriever)
+    #print(docs)
 
 #prompt
-def prompt(query):
-    prompt = f"""
-    <|system|>>
-    You are an AI Assistant that follows instructions extremely well.
-    Please be truthful and give direct answers. Please tell 'I don't know' if user query is not in context
-    </s>
-    <|user|>
-    {query}
-    </s>
-    <|assistant|>
-    """
-    return prompt
+#def prompt(query):
+    #prompt = f"""
+   # <|system|>>
+   # You are an AI Assistant that follows instructions extremely well.
+   # Please be truthful and give direct answers. Please tell 'I don't know' if user query is not in context
+    #</s>
+    #<|user|>
+    #{query}
+    #</s>
+    #<|assistant|>
+    #"""
+    #return prompt
 
 #response
-def response(query, retriever):
-    pipe = pipeline(
-        "text2text-generation",
-        model="google/flan-t5-base",
-        max_new_tokens=500
-        #huggingfacehub_api_token=HUGGINGFACEHUB_API_TOKEN
-    )
-    llm = HuggingFacePipeline(pipeline=pipe)
-    qa_chain = RetrievalQA.from_chain_type(
-        llm=llm,
-        chain_type="stuff",
-        retriever=retriever,
-        return_source_documents=True
-    )
-    result = qa_chain.invoke(query)
-    return result  
 
-
-#data store generation function
-def generate_data_stores():
-    documents = load_page()
-    chunks = split_text(documents)
-    return chunks  
-
-#function to load data from the web page
-def load_page():
-    loader = WebBaseLoader(DATA_URL)
-    return loader.load()
-
-#chunking/text splitting
-def split_text(documents: list[Document]):
-    text_splitter = RecursiveCharacterTextSplitter(
-    chunk_size=256,
-    chunk_overlap=50,
-    )
-    return text_splitter.split_documents(documents)
-
-
-
-#call the main function
-if __name__ == "__main__":
-    main()
 
 
