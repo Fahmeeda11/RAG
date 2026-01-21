@@ -1,5 +1,6 @@
 #load the data
 #import necessary libraries and create env
+import argparse
 import getpass
 import os
 import openai
@@ -8,10 +9,9 @@ from dotenv import load_dotenv
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_openai import OpenAIEmbeddings
 from langchain_openai import ChatOpenAI
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_chroma import Chroma
 from langchain_community.document_loaders import PyPDFLoader
-from langchain_community.llms import HuggingFacePipeline
-#from langchain_community.llms import HuggingFaceHub
 from langchain_classic.chains.retrieval_qa.base import RetrievalQA
 #env variables
 load_dotenv()
@@ -19,8 +19,6 @@ USER_AGENT= os.getenv('USER_AGENT')
 ROOT_PATH = os.getenv('SINGLE_FILE_PATH')
 OPENAI_API_KEY = getpass.getpass(os.getenv('OPENAI_API_KEY'))
 CHROMA_PATH = os.getenv('CHROMA_PATH')
-#HUGGINGFACEHUB_API_TOKEN = os.getenv('HUGGINGFACEHUB_API_TOKEN')
-
 ##to load data from web pages we can use WebBaseLoader. lanchain provides various document loaders to load data from different sources. 
 from langchain_community.document_loaders import WebBaseLoader
 
@@ -72,53 +70,40 @@ def embedding_function():
 list_of_docs = load_pdf(ROOT_PATH)
 print(f"loaded {len(list_of_docs)} documents from {ROOT_PATH}.")
 chunks = split_documents(list_of_docs)
+
+PROMPT_TEMPLATE = """
+Answer the question based only on the following context:
+
+{context}
+
+---
+
+Answer the question based on the above context: {question}
+"""
+
+#adding parser
+parser = argparse.ArgumentParser()
+parser.add_argument("query_text", type=str, help="Query text to search in the documents")
+args = parser.parse_args()
+query_text = args.query_text
+
+#embeddings
 embeddings = embedding_function()
-
-
 
 #create vector store using Chroma
 db =Chroma(collection_name="documents", embedding_function=embeddings, persist_directory=CHROMA_PATH)
 db.add_documents(chunks)
-print(f"saved {len(chunks)} chunks to {CHROMA_PATH}.")
 
+results= db.similarity_search_with_relevance_scores(query_text, k=1)
 
+context_text = "\n\n---\n\n".join([doc.page_content for doc, _score in results])
+prompt_template = ChatPromptTemplate.from_template(PROMPT_TEMPLATE)
+prompt = prompt_template.format(context=context_text, question=query_text)
+print(prompt)
 
-
-
-
-#main function 
-#def main():
-    #chunks = generate_data_stores()    
-    #create embeddings without any api key
-    #embeddings = HuggingFaceEmbeddings(
-        #model_name="sentence-transformers/all-MiniLM-L6-v2"
-    #)
-    #used vector store using FAISS
-    #vectorstore = FAISS.from_documents(chunks, embeddings)
-    #retriever = vectorstore.as_retriever(
-        #search_type="mmr",
-        #search_kwargs={"k": 3}
-    #)
-
-    #query = "what is recurrent neural network?"
-    #docs = response(query, retriever)
-    #print(docs)
-
-#prompt
-#def prompt(query):
-    #prompt = f"""
-   # <|system|>>
-   # You are an AI Assistant that follows instructions extremely well.
-   # Please be truthful and give direct answers. Please tell 'I don't know' if user query is not in context
-    #</s>
-    #<|user|>
-    #{query}
-    #</s>
-    #<|assistant|>
-    #"""
-    #return prompt
-
-#response
-
-
-
+model = ChatOpenAI()
+response = model.ainvoke(prompt)
+print("Response:", response)
+#sources
+sources = ("\n".join([doc.metadata["source"] for doc, _ in results]))
+print("Sources:", sources)
