@@ -10,9 +10,10 @@ from langchain_community.document_loaders import PyPDFLoader
 #env variables
 load_dotenv()
 USER_AGENT= os.getenv('USER_AGENT')
-ROOT_PATH = os.getenv('SINGLE_FILE_PATH')
+ROOT_PATH = os.getenv('DATA_PATH')
 OPENAI_API_KEY = getpass.getpass(os.getenv('OPENAI_API_KEY'))
 CHROMA_PATH = os.getenv('CHROMA_PATH')
+
 
 # function to load pdf files from a folder
 def load_pdf(DATA_PATH):
@@ -48,6 +49,8 @@ def split_documents(documents):
     print(f"split {len(documents)} documents into {len(chunks)} chunks.")
     return chunks
 
+
+
 #function to create embeddings
 def embedding_function():
     print("creating embeddings using OpenAI...")
@@ -66,10 +69,20 @@ print(f"loaded {len(list_of_docs)} documents from {ROOT_PATH}.")
 #calling split_documents function with chunks variable
 chunks = split_documents(list_of_docs)
 
+#batch size for chunks
+
 #embeddings 
 embeddings = embedding_function()
 
 #create vector store using Chroma
 db =Chroma(collection_name="documents", embedding_function=embeddings, persist_directory=CHROMA_PATH)
-db.add_documents(chunks)
+# db.add_documents(chunks)
+BATCH_SIZE = 1000
+for i in range(0, len(chunks), BATCH_SIZE):
+    batch_chunks = chunks[i:i + BATCH_SIZE]
+    print(f"processing batch {i//BATCH_SIZE + 1}: adding {len(batch_chunks)} chunks to vector store...")
+    db.add_documents(batch_chunks)
+    
 print("added documents to Chroma vector store:", db)
+
+
