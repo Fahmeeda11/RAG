@@ -23,16 +23,29 @@ for message in streamlit.session_state.messages:
     with streamlit.chat_message(message["role"]):
         streamlit.markdown(message["content"])
 print("Displayed previous messages.")
-if prompt := streamlit.chat_input("What is up?"):
+if prompt := streamlit.chat_input("What is up?", accept_file="directory", file_type=["pdf"]):
     streamlit.session_state.messages.append({"role": "user", "content": prompt})
     with streamlit.chat_message("user"):
         streamlit.markdown(prompt)
+if prompt and prompt["files"]:
+    streamlit.image(prompt["files"][0])
+    # if prompt and prompt["files"]:
+    #     streamlit.image(prompt["files"][0])
     print("User prompt added to session state messages.")
     with streamlit.chat_message("assistant"):
         content,sources = get_response(prompt)
         streamlit.markdown(content)
         with streamlit.expander("sources"):
             streamlit.text(sources)
+    with streamlit.chat_message("assistant"):
+        uploaded_files = prompt["files"]
+        streamlit.markdown(uploaded_files)
+        # with streamlit.chat_message("files"):
+        #     uploaded_files = prompt.files
+        #     if uploaded_files:
+        #         for file in uploaded_files:
+        #             streamlit.image(file)
+        
         print("Assistant response generated.")
     streamlit.session_state.messages.append({"role": "assistant", "content": content})
     print("Assistant response added to session state messages.")
