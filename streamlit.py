@@ -1,9 +1,15 @@
+import os
+from dotenv import load_dotenv
 from openai import OpenAI
 import streamlit
 from dataclasses import dataclass
-from query import get_response #importing function from other py file
+from query import get_response, embedding_function #importing function from other py file
 from langchain_community.document_loaders import PyPDFLoader
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_chroma import Chroma
 
+load_dotenv()
+CHROMA_PATH = os.getenv('CHROMA_PATH') #loading path
 
 streamlit.title("RAG Chatbot with Streamlit and OpenAI") #title for the page
 #api key setup for openai
@@ -21,8 +27,7 @@ if "messages" not in streamlit.session_state:
     streamlit.session_state.messages = []
 print("Session state messages initialized.")
 
-streamlit.session_state.docs_loaded = True
-print("Documents loaded and processed:", streamlit.session_state.docs_loaded)
+
 
 
 #upload ui
@@ -30,13 +35,29 @@ if not streamlit.session_state.docs_loaded:
     uploaded_files = streamlit.file_uploader(label="Upload PDF files", accept_multiple_files=True, type=["pdf"])
     if uploaded_files:
         with streamlit.spinner("Processing..."):
-            file_path = "./doc_files/"
+            path = "./doc_files/"
+            print("Processing uploaded files...")
+            all_docs = [] #list to store all documents  
             for file in uploaded_files:
-                with open(file_path + file.name, "wb") as f:
-                    f.write(file.getvalue())
-                loader = PyPDFLoader(file_path)
-                pages = loader.load_and_split()
-            
+                fullpath = path + file.name
+                with open(fullpath, "wb") as f:
+                   f.write(file.getvalue())
+                   print(f"Saved uploaded file: {file.name}")
+                   
+            loader = PyPDFLoader(fullpath)
+            print(f"Loaded PDF file: {file.name}")
+            pages = RecursiveCharacterTextSplitter(chunk_size=800, chunk_overlap=80).split_documents(loader.load())
+            print(f"Split PDF into {len(pages)} chunks: {file.name}")
+            all_docs.extend(pages)
+            streamlit.session_state.docs_loaded = True
+        embeddings = embedding_function()
+        db =Chroma(collection_name="documents", embedding_function=embeddings, persist_directory=CHROMA_PATH)
+        db.add_documents(all_docs, metadata={"source": file.name})
+
+
+
+    
+
 
 #chat ui
 for message in streamlit.session_state.messages:
