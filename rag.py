@@ -1,5 +1,5 @@
 #import necessary libraries and create env
-import getpass
+import getpass 
 import os
 from dotenv import load_dotenv
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -7,15 +7,13 @@ from langchain_openai import OpenAIEmbeddings
 from langchain_chroma import Chroma
 from langchain_community.document_loaders import PyPDFLoader
 
-
-
 #env variables
 load_dotenv()
 USER_AGENT= os.getenv('USER_AGENT')
 ROOT_PATH = os.getenv('DATA_PATH')
 OPENAI_API_KEY = getpass.getpass(os.getenv('OPENAI_API_KEY'))
 CHROMA_PATH = os.getenv('CHROMA_PATH')
-
+BATCH_SIZE = 1000
 
 # function to load pdf files from a folder
 def load_pdf(DATA_PATH):
@@ -39,19 +37,17 @@ def load_pdf(DATA_PATH):
 #function to split documents into chunks
 def split_documents(documents):
     chunks = []
-    for doc in documents:
-        text_splitter = RecursiveCharacterTextSplitter(
+    text_splitter = RecursiveCharacterTextSplitter(
         chunk_size=800,
         chunk_overlap=80,
         length_function=len,
         is_separator_regex=False,
     )
+    for doc in documents:
         doc_chunks = text_splitter.split_documents(doc)
         chunks.extend(doc_chunks)
     print(f"split {len(documents)} documents into {len(chunks)} chunks.")
     return chunks
-
-
 
 #function to create embeddings
 def embedding_function():
@@ -64,27 +60,24 @@ def embedding_function():
     return embeddings
 
 
-#calling load_pdf function with variable.
-list_of_docs = load_pdf(ROOT_PATH)
-print(f"loaded {len(list_of_docs)} documents from {ROOT_PATH}.")
+if __name__ == "__main__":
+    #calling load_pdf function with variable.
+    list_of_docs = load_pdf(ROOT_PATH)
+    print(f"loaded {len(list_of_docs)} documents from {ROOT_PATH}.")
+    #calling split_documents function with chunks variable
+    chunks = split_documents(list_of_docs)
 
-#calling split_documents function with chunks variable
-chunks = split_documents(list_of_docs)
 
-#batch size for chunks
+    #embeddings 
+    embeddings = embedding_function()
 
-#embeddings 
-embeddings = embedding_function()
+    #create vector store using Chroma
+    db =Chroma(collection_name="documents", embedding_function=embeddings, persist_directory=CHROMA_PATH)
 
-#create vector store using Chroma
-db =Chroma(collection_name="documents", embedding_function=embeddings, persist_directory=CHROMA_PATH)
-# db.add_documents(chunks)
-BATCH_SIZE = 1000
-for i in range(0, len(chunks), BATCH_SIZE):
-    batch_chunks = chunks[i:i + BATCH_SIZE]
-    print(f"processing batch {i//BATCH_SIZE + 1}: adding {len(batch_chunks)} chunks to vector store...")
-    db.add_documents(batch_chunks)
-    
-print("added documents to Chroma vector store:", db)
+    for i in range(0, len(chunks), BATCH_SIZE):
+        batch_chunks = chunks[i:i + BATCH_SIZE]
+        print(f"processing batch {i//BATCH_SIZE + 1}: adding {len(batch_chunks)} chunks to vector store...")
+        db.add_documents(batch_chunks)
+        print("added documents to Chroma vector store:", db)
 
 

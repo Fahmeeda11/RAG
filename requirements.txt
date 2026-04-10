@@ -1,0 +1,23 @@
+# core frameworks
+langchain==1.2.5
+langchain-core==1.2.7
+langchain-community==0.4.1
+langchain-text-splitters==1.1.0
+
+#vector store
+chromadb==1.4.1
+langchain-chroma==1.1.0
+
+#llm and embeddings
+langchain-openai==1.1.7
+openai
+
+#pdf parsing
+pypdf
+streamlit-pdf
+
+#web ui
+streamlit==1.53.1
+
+#env
+python-dotenv
